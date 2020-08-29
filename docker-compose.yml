@@ -7,16 +7,33 @@ networks:
   internal:
 
 volumes:
-  nextcloud:
+  wordpress:
   mysqldir:
 
 services:
-  nextcloud:
-    image: nextcloud:17.0.1
+  wp:
+    build:
+      context: .
+      dockerfile: Dockerfile.wp
+      args:
+        PLUGINS: redis-cache,wp-force-login
+    networks:
+      - proxy
+      - internal
+    depends_on:
+      - db
+      - smtp
+      - redis
     restart: always
     volumes:
-      - nextcloud:/var/www/html
-      - ./nextcloud.config.php:/usr/src/nextcloud/config/custom.config.php
+      - wordpress:/var/www/html/wp-content
+      - ./php.ini:/usr/local/etc/php/php.ini
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: ${MYSQL_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_DB_PASSWORD}
+      WORDPRESS_CONFIG_EXTRA: define('WP_REDIS_HOST', 'redis');
     labels:
       - "traefik.docker.network=proxy"
       - "traefik.enable=true"
@@ -27,31 +44,14 @@ services:
       - "traefik.frontend.headers.STSSeconds=315360000"
       - "traefik.frontend.headers.STSIncludeSubdomains=true"
       - "traefik.frontend.headers.STSPreload=true"
-      - "traefik.frontend.redirect.regex=^https?://${DOMAIN_NAME}/.well-known/(carddav|caldav)"
-      - "traefik.frontend.redirect.replacement=https://${DOMAIN_NAME}/remote.php/dav"
-    networks:
-      - proxy
-      - internal
-    depends_on:
-      - db
-      - smtp
-      - redis
-    environment:
-      MYSQL_DATABASE: nextcloud
-      MYSQL_USER: root
-      MYSQL_HOST: db:3306
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      NEXTCLOUD_SYSTEM_EMAIL:
-      NEXTCLOUD_PROXY_IP:
-      NEXTCLOUD_DOMAIN_NAME: ${DOMAIN_NAME}
-      REDIS_HOST: redis
 
   db:
-    image: mariadb:10.4.10
+    image: mariadb:10.5
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: "nextcloud"
-      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: "wordpress"
+      MYSQL_USER: ${MYSQL_DB_USER}
+      MYSQL_PASSWORD: ${MYSQL_DB_PASSWORD}
     restart: always
     volumes:
       - mysqldir:/var/lib/mysql
@@ -68,20 +68,19 @@ services:
     labels:
       - traefik.enable=false
 
+  # Auto-update containers.
+  watchtower:
+    image: v2tec/watchtower:latest
+    # Apply updates at midnight.
+    command: --cleanup --schedule "0 0 0 * * *"
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=false"
+
   redis:
     image: redis:alpine
     restart: always
-    networks:
-      - internal
-
-  cron:
-    image: nextcloud:17.0.1-apache
-    restart: always
-    volumes:
-      - nextcloud:/var/www/html
-    entrypoint: /cron.sh
-    depends_on:
-      - db
-      - redis
     networks:
       - internal

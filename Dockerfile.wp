@@ -1,0 +1,26 @@
+# ==============================================================================
+#                              Wordpress with Redis
+# ==============================================================================
+
+FROM wordpress:5.5
+
+# Install PHP module for redis.
+# printf statement mocks answering the prompts from the pecl install
+RUN printf "\n \n" | pecl install redis && docker-php-ext-enable redis
+
+# Restart to complete install.
+RUN /etc/init.d/apache2 restart
+
+# Install wget.
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# Download plugins to custom directory.
+ARG PLUGINS
+RUN mkdir -p /opt/wordpress/plugins
+RUN for PLUGIN in $(echo $PLUGINS | sed "s/,/ /g"); do wget "https://downloads.wordpress.org/plugin/$PLUGIN.zip" && unzip -q "$PLUGIN.zip" -d /opt/wordpress/plugins/ && rm "$PLUGIN.zip" ; done
+
+# Add line to entrypoint script to create symlinks to plugins.
+RUN sed -i 's/\(\s*\).*WordPress has been successfully copied.*/&\n\1ln -s \/opt\/wordpress\/plugins\/\* \/var\/www\/html\/wp-content\/plugins/' /usr/local/bin/docker-entrypoint.sh
