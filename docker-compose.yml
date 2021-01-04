@@ -15,8 +15,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.wp
-      args:
-        PLUGINS: redis-cache,wp-force-login
     networks:
       - proxy
       - internal
@@ -34,6 +32,7 @@ services:
       WORDPRESS_DB_USER: ${MYSQL_DB_USER}
       WORDPRESS_DB_PASSWORD: ${MYSQL_DB_PASSWORD}
       WORDPRESS_CONFIG_EXTRA: define('WP_REDIS_HOST', 'redis');
+      WP_PLUGINS: redis-cache,wp-force-login,wp-mail-smtp
     labels:
       - "traefik.docker.network=proxy"
       - "traefik.enable=true"

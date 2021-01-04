@@ -17,10 +17,23 @@ RUN apt-get update && apt-get install -y \
     unzip \
  && rm -rf /var/lib/apt/lists/*
 
-# Download plugins to custom directory.
-ARG PLUGINS
-RUN mkdir -p /opt/wordpress/plugins
-RUN for PLUGIN in $(echo $PLUGINS | sed "s/,/ /g"); do wget "https://downloads.wordpress.org/plugin/$PLUGIN.zip" && unzip -q "$PLUGIN.zip" -d /opt/wordpress/plugins/ && rm "$PLUGIN.zip" ; done
-
-# Add line to entrypoint script to create symlinks to plugins.
-RUN sed -i 's/\(\s*\).*WordPress has been successfully copied.*/&\n\1ln -s \/opt\/wordpress\/plugins\/\* \/var\/www\/html\/wp-content\/plugins/' /usr/local/bin/docker-entrypoint.sh
+# Create and source script to download plugins when run.
+RUN mkdir -p /opt/wordpress/plugins && \
+  echo " \n\
+for PLUGIN in \$(echo \$WP_PLUGINS | sed \"s/,/ /g\") \n\
+do \n\
+  if [ ! -d /opt/wordpress/plugins/\$PLUGIN ] \n\
+  then \n\
+    if [ ! -d /var/www/html/wp-content/plugins/\$PLUGIN ] \n\
+    then \n\
+      wget "https://downloads.wordpress.org/plugin/\$PLUGIN.zip" && \n\
+      unzip -q "\$PLUGIN.zip" -d /opt/wordpress/plugins/ && \n\
+      ln -s /opt/wordpress/plugins/\$PLUGIN /var/www/html/wp-content/plugins && \n\
+      rm "\$PLUGIN.zip" \n\
+    else \n\
+      echo "Plugin \$PLUGIN already exists in /var/www/html/wp-content/plugins. Not overwriting." \n\
+    fi \n\
+  fi \n\
+done \n\
+" > /opt/wordpress/get-plugins.sh && \
+  sed -i 's/^exec/source \/opt\/wordpress\/get-plugins\.sh\n&/' /usr/local/bin/docker-entrypoint.sh
